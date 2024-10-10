@@ -38,3 +38,48 @@ DB_PORT=puerto_mysql
 DB_PASSWORD=tu_password_de_mysql
 DB_NAME=nombre_base_de_datos
 JWT_SECRET=clave_secreta_jwt
+````
+### Instalacion
+
+## Clonar repositorio
+
+````
+git clone https://github.com/NicolasZelarayan/chat-admin.git
+cd chat-admin
+````
+## Instalar dependencias
+````
+npm install
+````
+
+##Crear Base de Datos
+
+````
+CREATE DATABASE base_de_datos;
+USE base_de_datos;
+
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(255) NOT NULL,
+  password VARCHAR(255) NOT NULL
+);
+````
+## Generar Password Hasheada
+definimos la constante password y ejecutamos el generador
+
+```
+node generate.js
+```
+Copiamos la contraseña hasheada y realizamos el insert en la base de datos
+
+```
+INSERT INTO users (username, password)
+VALUES ('nombre_de_usuario', 'contraseña_hasheada');
+```
+
+### Ejecutamos en modo desarrollo 
+
+```
+npm run dev
+```
+
