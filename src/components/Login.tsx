@@ -2,6 +2,9 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { User } from '../types'
 
+// Usar la variable de entorno o un valor predeterminado para la API URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
 interface LoginProps {
   setUser: (user: User) => void
 }
@@ -17,7 +20,8 @@ const Login: React.FC<LoginProps> = ({ setUser }) => {
     setError('')
 
     try {
-      const response = await fetch('https://mesa-api.synagro.com.ar/api/login', {
+      // El código ya está usando rutas relativas, lo cual es correcto:
+      const response = await fetch('/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -35,6 +39,7 @@ const Login: React.FC<LoginProps> = ({ setUser }) => {
       setUser({ username: data.username })
       navigate('/dashboard')
     } catch (err) {
+      console.error('Error de login:', err)
       if (err instanceof Error) {
         setError(err.message || 'Error en el inicio de sesión')
       } else {
