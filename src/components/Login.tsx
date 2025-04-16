@@ -17,7 +17,7 @@ const Login: React.FC<LoginProps> = ({ setUser }) => {
     setError('')
 
     try {
-      const response = await fetch('http://35.199.109.28:4000/api/login', {
+      const response = await fetch('mesa-api.synagro.com.ar/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
