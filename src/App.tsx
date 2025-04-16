@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
+import Chat from './components/Chat'
 import { User } from './types'
 
 function App() {
@@ -14,7 +15,11 @@ function App() {
           <Route path="/login" element={<Login setUser={setUser} />} />
           <Route
             path="/dashboard"
-            element={user ? <Dashboard user={user} /> : <Navigate to="/login" />}
+            element={user ? <Dashboard user={user} setUser={setUser} /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/chat"
+            element={user ? <Chat user={user} /> : <Navigate to="/login" />}
           />
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
