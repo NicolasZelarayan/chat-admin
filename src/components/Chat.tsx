@@ -1,7 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import OpenAI from 'openai';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Components } from 'react-markdown';
+
+// Definir la interfaz CodeProps localmente
+interface CodeProps {
+  node?: any;
+  inline?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+}
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -158,6 +170,65 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
     throw new Error('Run timed out');
   };
 
+  // Este componente renderiza un mensaje de chat con formato Markdown
+  const MessageContent = ({ text, sender }: { text: string, sender: string }) => {
+    if (sender === 'user') {
+      return <div className="whitespace-pre-wrap break-words">{text}</div>;
+    }
+    
+    return (
+      <div className="markdown-content">
+        <ReactMarkdown
+          components={{
+            h1: ({node, ...props}) => <h1 className="text-2xl font-bold my-4" {...props} />,
+            h2: ({node, ...props}) => <h2 className="text-xl font-bold my-3" {...props} />,
+            h3: ({node, ...props}) => <h3 className="text-lg font-bold my-2" {...props} />,
+            p: ({node, ...props}) => <p className="my-2" {...props} />,
+            ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2" {...props} />,
+            ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2" {...props} />,
+            li: ({node, ...props}) => <li className="my-1" {...props} />,
+            a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
+            blockquote: ({node, ...props}) => (
+              <blockquote className="border-l-4 border-gray-300 pl-4 italic my-2" {...props} />
+            ),
+            code: ({ node, inline, className, children, ...props }: CodeProps) => {
+              const match = /language-(\w+)/.exec(className || '');
+              return !inline && match ? (
+                <SyntaxHighlighter
+                  style={atomDark}
+                  language={match[1]}
+                  PreTag="div"
+                  className="rounded my-2 text-sm"
+                  {...props}
+                >
+                  {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+              ) : (
+                <code className="bg-gray-100 px-1 rounded text-red-500 font-mono text-sm" {...props}>
+                  {children}
+                </code>
+              );
+            },
+            table: ({node, ...props}) => (
+              <div className="overflow-x-auto my-4">
+                <table className="min-w-full divide-y divide-gray-200" {...props} />
+              </div>
+            ),
+            thead: ({node, ...props}) => <thead className="bg-gray-50" {...props} />,
+            tbody: ({node, ...props}) => <tbody className="divide-y divide-gray-200" {...props} />,
+            tr: ({node, ...props}) => <tr className="hover:bg-gray-50" {...props} />,
+            th: ({node, ...props}) => (
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" {...props} />
+            ),
+            td: ({node, ...props}) => <td className="px-6 py-4 whitespace-nowrap" {...props} />,
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto p-4 h-screen flex flex-col">
       <div className="flex items-center mb-4">
@@ -183,16 +254,16 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
         {messages.map(message => (
           <div 
             key={message.id} 
-            className={`mb-4 ${message.sender === 'user' ? 'text-right' : 'text-left'}`}
+            className={`mb-6 ${message.sender === 'user' ? 'text-right' : 'text-left'}`}
           >
             <div 
-              className={`inline-block p-3 rounded-lg max-w-[70%] ${
+              className={`inline-block p-4 rounded-lg max-w-[80%] shadow ${
                 message.sender === 'user' 
                   ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 text-gray-800'
+                  : 'bg-white text-gray-800 border border-gray-200'
               }`}
             >
-              {message.text}
+              <MessageContent text={message.text} sender={message.sender} />
             </div>
             <div className="text-xs text-gray-500 mt-1">
               {message.timestamp.toLocaleTimeString()}
@@ -201,11 +272,10 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
         ))}
         {isLoading && (
           <div className="text-left mb-4">
-            <div className="inline-block p-3 rounded-lg bg-gray-200 text-gray-800">
-              <div className="flex space-x-2">
-                <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '600ms' }}></div>
+            <div className="inline-block p-4 rounded-lg bg-white border border-gray-200 text-gray-800 shadow">
+              <div className="flex items-center space-x-2">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                <span>El asistente está escribiendo...</span>
               </div>
             </div>
           </div>
@@ -223,7 +293,7 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
         />
         <button 
           type="submit" 
-          className="bg-blue-500 text-white p-3 rounded-r-lg hover:bg-blue-600 disabled:bg-blue-300"
+          className="bg-blue-500 text-white p-3 rounded-r-lg hover:bg-blue-600 disabled:bg-blue-300 transition-colors"
           disabled={isLoading || !input.trim() || !threadId}
         >
           <Send size={20} />

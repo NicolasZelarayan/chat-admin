@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { User, File } from '../types'
-import { Trash2, Upload, Search, LogOut, FileText, MessageSquare } from 'lucide-react'
+import { Trash2, Upload, Search, LogOut, FileText, MessageSquare, Calendar, Clock } from 'lucide-react'
 import { listFiles, uploadFile, deleteFile } from '../services/openai'
 import { useNavigate } from 'react-router-dom'
 
@@ -9,8 +9,27 @@ interface DashboardProps {
   setUser: (user: User | null) => void
 }
 
+// Función para formatear bytes en unidades legibles
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (!bytes) return '0 Bytes';
+  
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+// Función para formatear fechas
+const formatDate = (timestamp: number) => {
+  const date = new Date(timestamp * 1000); // Convertir de timestamp Unix a fecha JS
+  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
-  const [files, setFiles] = useState<File[]>([])
+  const [files, setFiles] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -26,11 +45,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
     try {
       setIsLoading(true)
       const fetchedFiles = await listFiles()
-      setFiles(fetchedFiles.map((file: any) => ({
-        id: file.id,
-        name: file.object_name || 'Unnamed file',
-        size: file.object_size || 0
-      })))
+      setFiles(fetchedFiles);
       setError(null)
     } catch (err) {
       setError('Error al cargar los archivos del vector store. Por favor, intente de nuevo.')
@@ -64,11 +79,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
       try {
         setIsLoading(true)
         const uploadedFile = await uploadFile(e.target.files[0])
-        setFiles([...files, {
-          id: uploadedFile.id,
-          name: uploadedFile.filename,
-          size: uploadedFile.bytes
-        }])
+        
+        // Actualizar la lista completa en lugar de añadir manualmente
+        await fetchFiles()
       } catch (err) {
         setError('Error al subir el archivo al vector store. Por favor, intente de nuevo.')
         console.error('Error uploading file:', err)
@@ -85,7 +98,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
   }
 
   const filteredFiles = files.filter(file =>
-    file.name.toLowerCase().includes(searchTerm.toLowerCase())
+    file.object_name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
@@ -121,8 +134,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="p-2 border rounded flex-grow"
         />
-        <label className="ml-4 bg-green-500 text-white p-2 rounded hover:bg-green-600 cursor-pointer">
-          <Upload className="inline mr-2" />
+        <label className="ml-4 bg-green-500 text-white p-2 rounded hover:bg-green-600 cursor-pointer flex items-center">
+          <Upload className="mr-2" size={18} />
           Subir archivo al Vector Store
           <input type="file" onChange={handleUpload} className="hidden" />
         </label>
@@ -148,36 +161,54 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
           <p className="mt-2 text-gray-600">Cargando archivos del Vector Store...</p>
         </div>
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="p-2 text-left">Nombre</th>
-              <th className="p-2 text-left">Tamaño</th>
-              <th className="p-2 text-left">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredFiles.length > 0 ? (
-              filteredFiles.map(file => (
-                <tr key={file.id} className="border-b">
-                  <td className="p-2">{file.name}</td>
-                  <td className="p-2">{file.size} bytes</td>
-                  <td className="p-2">
-                    <button onClick={() => confirmDelete(file.id)} className="text-red-500 hover:text-red-700">
-                      <Trash2 />
-                    </button>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="p-2 text-left">Nombre</th>
+                <th className="p-2 text-left">Tamaño</th>
+                <th className="p-2 text-left">Fecha</th>
+                <th className="p-2 text-left">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredFiles.length > 0 ? (
+                filteredFiles.map(file => (
+                  <tr key={file.id} className="border-b hover:bg-gray-50">
+                    <td className="p-3">
+                      <div className="flex items-center">
+                        <FileText size={18} className="mr-2 text-blue-500" />
+                        <span>{file.object_name}</span>
+                      </div>
+                    </td>
+                    <td className="p-3">{formatBytes(file.object_size)}</td>
+                    <td className="p-3">
+                      <div className="flex items-center">
+                        <Calendar size={16} className="mr-1 text-gray-500" />
+                        <span>{file.created_at ? formatDate(file.created_at) : 'N/A'}</span>
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <button 
+                        onClick={() => confirmDelete(file.id)} 
+                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                        title="Eliminar archivo"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="p-4 text-center text-gray-500">
+                    {searchTerm ? 'No se encontraron archivos que coincidan con la búsqueda' : 'No hay archivos en el Vector Store'}
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={3} className="p-4 text-center text-gray-500">
-                  No hay archivos en el Vector Store
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Confirmation Dialog */}

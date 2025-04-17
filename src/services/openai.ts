@@ -4,14 +4,43 @@ const VECTOR_STORE_ID = 'vs_680076f14da08191a3b2f2b330da3dc3';
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true // Note: This is not recommended for production
+  dangerouslyAllowBrowser: true
 });
 
 export const listFiles = async () => {
   try {
     // List all files from the vector store
     const response = await openai.beta.vectorStores.files.list(VECTOR_STORE_ID);
-    return response.data;
+    
+    // Para cada archivo en el vector store, obtener más detalles si es necesario
+    const filesWithDetails = await Promise.all(
+      response.data.map(async (fileRef) => {
+        try {
+          // Obtener detalles del archivo desde OpenAI files API
+          const fileDetails = await openai.files.retrieve(fileRef.id);
+          
+          return {
+            id: fileRef.id,
+            file_id: fileRef.id,
+            object_name: fileDetails.filename, // Usar el nombre real del archivo
+            object_size: fileDetails.bytes,    // Usar el tamaño real del archivo
+            created_at: fileDetails.created_at
+          };
+        } catch (error) {
+          console.error(`Error obteniendo detalles para el archivo ${fileRef.id}:`, error);
+          // Devolver información básica si no se pueden obtener detalles
+          return {
+            id: fileRef.id,
+            file_id: fileRef.id,
+            object_name: `File-${fileRef.id.substring(0, 8)}`, // Nombre genérico con parte del ID
+            object_size: 0,
+            created_at: fileRef.created_at
+          };
+        }
+      })
+    );
+    
+    return filesWithDetails;
   } catch (error) {
     console.error('Error listing vector store files:', error);
     throw error;
