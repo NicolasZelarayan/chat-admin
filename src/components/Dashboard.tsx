@@ -35,6 +35,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
   const [error, setError] = useState<string | null>(null)
   const [fileToDelete, setFileToDelete] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [sortField, setSortField] = useState<'name' | 'size' | 'date'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const filesPerPage = 20;
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -97,9 +101,38 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
     navigate('/login')
   }
 
-  const filteredFiles = files.filter(file =>
-    file.object_name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const toggleSort = (field: 'name' | 'size' | 'date') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedAndFilteredFiles = files
+    .filter(file => file.object_name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => {
+      if (sortField === 'name') {
+        return sortDirection === 'asc' 
+          ? a.object_name.localeCompare(b.object_name)
+          : b.object_name.localeCompare(a.object_name);
+      } else if (sortField === 'size') {
+        return sortDirection === 'asc'
+          ? a.object_size - b.object_size
+          : b.object_size - a.object_size;
+      } else { // date
+        const dateA = a.created_at || 0;
+        const dateB = b.created_at || 0;
+        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+    });
+
+  const totalPages = Math.ceil(sortedAndFilteredFiles.length / filesPerPage);
+  const paginatedFiles = sortedAndFilteredFiles.slice(
+    (page - 1) * filesPerPage,
+    page * filesPerPage
+  );
 
   return (
     <div className="container mx-auto p-4">
@@ -165,15 +198,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-200">
-                <th className="p-2 text-left">Nombre</th>
-                <th className="p-2 text-left">Tamaño</th>
-                <th className="p-2 text-left">Fecha</th>
+                <th className="p-2 text-left" onClick={() => toggleSort('name')}>Nombre</th>
+                <th className="p-2 text-left" onClick={() => toggleSort('size')}>Tamaño</th>
+                <th className="p-2 text-left" onClick={() => toggleSort('date')}>Fecha</th>
                 <th className="p-2 text-left">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filteredFiles.length > 0 ? (
-                filteredFiles.map(file => (
+              {paginatedFiles.length > 0 ? (
+                paginatedFiles.map(file => (
                   <tr key={file.id} className="border-b hover:bg-gray-50">
                     <td className="p-3">
                       <div className="flex items-center">
@@ -208,6 +241,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
               )}
             </tbody>
           </table>
+          <div className="flex justify-between items-center mt-4">
+            <button 
+              onClick={() => setPage(page => Math.max(page - 1, 1))} 
+              disabled={page === 1}
+              className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <span>Página {page} de {totalPages}</span>
+            <button 
+              onClick={() => setPage(page => Math.min(page + 1, totalPages))} 
+              disabled={page === totalPages}
+              className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
 
