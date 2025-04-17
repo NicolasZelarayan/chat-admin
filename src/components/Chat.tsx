@@ -1,50 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send } from 'lucide-react';
+import OpenAI from 'openai';
 
-const API_URL = 'https://api-chat1-1-637676062045.southamerica-east1.run.app';
-const API_KEY = import.meta.env.VITE_CHAT_API_KEY || '';
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true
+});
 
-interface ChatResponse {
-  answer: string;
-}
-
-const askQuestion = async (question: string): Promise<string> => {
-  try {
-    const response = await axios.post<ChatResponse>(
-      `${API_URL}/ask`,
-      { question },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY
-        }
-      }
-    );
-    return response.data.answer;
-  } catch (error: any) {
-    // Verificamos si es un error de Axios comprobando si tiene la propiedad response
-    if (error.response) {
-      if (error.response.status === 403) {
-        throw new Error('Error de autenticación: API key inválida');
-      } else if (error.response.status === 400) {
-        throw new Error('Error en la solicitud: Pregunta no proporcionada');
-      } else {
-        const errorMessage = error.response.data && typeof error.response.data === 'object' 
-          ? error.response.data.message || 'Error desconocido'
-          : error.message || 'Error desconocido';
-        throw new Error(`Error del servidor: ${errorMessage}`);
-      }
-    } else if (error.request) {
-      // La solicitud se realizó pero no se recibió respuesta
-      throw new Error('No se recibió respuesta del servidor');
-    } else {
-      // Ocurrió un error al configurar la solicitud
-      throw new Error(`Error al configurar la solicitud: ${error.message || 'Error desconocido'}`);
-    }
-  }
-};
+// Assistant ID
+const ASSISTANT_ID = 'asst_gtfqLpPJuQnhonLHG0RIpvma';
 
 interface Message {
   id: string;
@@ -70,9 +36,26 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll al último mensaje
+  // Create a new thread when component mounts
+  useEffect(() => {
+    const createThread = async () => {
+      try {
+        const thread = await openai.beta.threads.create();
+        setThreadId(thread.id);
+        console.log('Thread created with ID:', thread.id);
+      } catch (err) {
+        console.error('Error creating thread:', err);
+        setError('Error al inicializar el chat');
+      }
+    };
+
+    createThread();
+  }, []);
+
+  // Auto-scroll to the last message
   useEffect(() => {
     if (messageContainerRef.current) {
       messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
@@ -82,7 +65,7 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!input.trim()) return;
+    if (!input.trim() || !threadId) return;
     
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -97,22 +80,82 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
     setError(null);
     
     try {
-      const response = await askQuestion(userMessage.text);
+      // Add message to thread
+      await openai.beta.threads.messages.create(threadId, {
+        role: 'user',
+        content: userMessage.text
+      });
       
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: response,
-        sender: 'bot',
-        timestamp: new Date()
-      };
+      // Run the assistant
+      const run = await openai.beta.threads.runs.create(threadId, {
+        assistant_id: ASSISTANT_ID
+      });
       
-      setMessages(prev => [...prev, botMessage]);
+      // Poll for the run completion
+      let runStatus = await pollRunStatus(threadId, run.id);
+      
+      if (runStatus === 'completed') {
+        // Get the assistant's messages
+        const messagesResponse = await openai.beta.threads.messages.list(threadId);
+        
+        // Get the last assistant message
+        const assistantMessages = messagesResponse.data.filter(msg => msg.role === 'assistant');
+        if (assistantMessages.length > 0) {
+          const lastMessage = assistantMessages[0];
+          
+          // Extract text content
+          let responseText = '';
+          if (lastMessage.content && lastMessage.content.length > 0) {
+            const textContent = lastMessage.content.filter(content => 
+              content.type === 'text'
+            );
+            if (textContent.length > 0 && 'text' in textContent[0]) {
+              responseText = textContent[0].text.value;
+            }
+          }
+          
+          const botMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            text: responseText || 'No pude generar una respuesta.',
+            sender: 'bot',
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, botMessage]);
+        }
+      } else {
+        throw new Error(`La ejecución del asistente falló con estado: ${runStatus}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al comunicarse con el asistente');
       console.error('Error al enviar mensaje:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const pollRunStatus = async (threadId: string, runId: string) => {
+    const maxAttempts = 20;
+    const delayMs = 1000;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const run = await openai.beta.threads.runs.retrieve(threadId, runId);
+      
+      if (run.status === 'completed') {
+        return 'completed';
+      } else if (
+        run.status === 'failed' || 
+        run.status === 'cancelled' || 
+        run.status === 'expired'
+      ) {
+        throw new Error(`Run ended with status: ${run.status}`);
+      }
+      
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    
+    throw new Error('Run timed out');
   };
 
   return (
@@ -176,12 +219,12 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
           onChange={e => setInput(e.target.value)}
           placeholder="Escribe tu mensaje aquí..."
           className="flex-1 p-3 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
-          disabled={isLoading}
+          disabled={isLoading || !threadId}
         />
         <button 
           type="submit" 
           className="bg-blue-500 text-white p-3 rounded-r-lg hover:bg-blue-600 disabled:bg-blue-300"
-          disabled={isLoading || !input.trim()}
+          disabled={isLoading || !input.trim() || !threadId}
         >
           <Send size={20} />
         </button>

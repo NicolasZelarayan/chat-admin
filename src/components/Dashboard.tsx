@@ -28,12 +28,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
       const fetchedFiles = await listFiles()
       setFiles(fetchedFiles.map((file: any) => ({
         id: file.id,
-        name: file.filename,
-        size: file.bytes
+        name: file.object_name || 'Unnamed file',
+        size: file.object_size || 0
       })))
       setError(null)
     } catch (err) {
-      setError('Error al cargar los archivos. Por favor, intente de nuevo.')
+      setError('Error al cargar los archivos del vector store. Por favor, intente de nuevo.')
+      console.error('Error fetching files:', err)
     } finally {
       setIsLoading(false)
     }
@@ -53,13 +54,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
       setShowDeleteConfirm(false)
       setFileToDelete(null)
     } catch (err) {
-      setError('Error al eliminar el archivo. Por favor, intente de nuevo.')
+      setError('Error al eliminar el archivo del vector store. Por favor, intente de nuevo.')
+      console.error('Error deleting file:', err)
     }
   }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       try {
+        setIsLoading(true)
         const uploadedFile = await uploadFile(e.target.files[0])
         setFiles([...files, {
           id: uploadedFile.id,
@@ -67,7 +70,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
           size: uploadedFile.bytes
         }])
       } catch (err) {
-        setError('Error al subir el archivo. Por favor, intente de nuevo.')
+        setError('Error al subir el archivo al vector store. Por favor, intente de nuevo.')
+        console.error('Error uploading file:', err)
+      } finally {
+        setIsLoading(false)
       }
     }
   }
@@ -81,8 +87,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
   const filteredFiles = files.filter(file =>
     file.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
-
-  if (isLoading) return <div className="text-center mt-8">Cargando...</div>
 
   return (
     <div className="container mx-auto p-4">
@@ -119,9 +123,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
         />
         <label className="ml-4 bg-green-500 text-white p-2 rounded hover:bg-green-600 cursor-pointer">
           <Upload className="inline mr-2" />
-          Subir archivo
+          Subir archivo al Vector Store
           <input type="file" onChange={handleUpload} className="hidden" />
         </label>
+      </div>
+      
+      <div className="mb-4 flex items-center bg-blue-50 p-3 rounded-md border border-blue-200">
+        <FileText className="text-blue-500 mr-2" size={20} />
+        <span className="font-medium">Vector Store ID: <span className="text-blue-600">vs_680076f14da08191a3b2f2b330da3dc3</span></span>
       </div>
       
       <div className="mb-4 flex items-center bg-blue-50 p-3 rounded-md border border-blue-200">
@@ -129,35 +138,54 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
         <span className="font-medium">Total de archivos: <span className="text-blue-600">{files.length}</span></span>
       </div>
       
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="p-2 text-left">Nombre</th>
-            <th className="p-2 text-left">Tamaño</th>
-            <th className="p-2 text-left">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredFiles.map(file => (
-            <tr key={file.id} className="border-b">
-              <td className="p-2">{file.name}</td>
-              <td className="p-2">{file.size} bytes</td>
-              <td className="p-2">
-                <button onClick={() => confirmDelete(file.id)} className="text-red-500 hover:text-red-700">
-                  <Trash2 />
-                </button>
-              </td>
+      {isLoading ? (
+        <div className="text-center py-8">
+          <div className="flex justify-center items-center space-x-2">
+            <div className="w-3 h-3 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-3 h-3 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            <div className="w-3 h-3 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '600ms' }}></div>
+          </div>
+          <p className="mt-2 text-gray-600">Cargando archivos del Vector Store...</p>
+        </div>
+      ) : (
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="p-2 text-left">Nombre</th>
+              <th className="p-2 text-left">Tamaño</th>
+              <th className="p-2 text-left">Acciones</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredFiles.length > 0 ? (
+              filteredFiles.map(file => (
+                <tr key={file.id} className="border-b">
+                  <td className="p-2">{file.name}</td>
+                  <td className="p-2">{file.size} bytes</td>
+                  <td className="p-2">
+                    <button onClick={() => confirmDelete(file.id)} className="text-red-500 hover:text-red-700">
+                      <Trash2 />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3} className="p-4 text-center text-gray-500">
+                  No hay archivos en el Vector Store
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
 
       {/* Confirmation Dialog */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
             <h3 className="text-lg font-semibold mb-4">Confirmar eliminación</h3>
-            <p className="mb-6">¿Está seguro que desea eliminar este archivo? Esta acción no se puede deshacer.</p>
+            <p className="mb-6">¿Está seguro que desea eliminar este archivo del Vector Store? Esta acción no se puede deshacer.</p>
             <div className="flex justify-end space-x-3">
               <button 
                 onClick={() => setShowDeleteConfirm(false)} 
